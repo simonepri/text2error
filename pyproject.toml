@@ -6,6 +6,7 @@ authors = ["Simone Primarosa <simonepri@outlook.com>"]
 license = "MIT"
 homepage = "https://github.com/simonepri/text2error#readme"
 repository = "https://github.com/simonepri/text2error"
+readme = "readme.md"
 keywords = ["text", "error", "generation", "ged", "gec"]
 
 packages = [
