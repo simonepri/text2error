@@ -27,6 +27,7 @@ numpy = "^1.18.2"
 torch = "^1.4.0"
 # See https://github.com/python-poetry/poetry/issues/2326
 # As workaround run `pip install --upgrade -qq git+https://github.com/huggingface/transformers.git@b5c6d3d4c7cd81a5396a85026b6c8b730d1a55b6`
+#transformers = {git = "https://github.com/huggingface/transformers.git", rev = "b5c6d3d4c7cd81a5396a85026b6c8b730d1a55b6"}
 lm_scorer = "^0.3.2"
 
 [tool.poetry.dev-dependencies]
