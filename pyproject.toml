@@ -15,7 +15,7 @@ packages = [
 ]
 
 [tool.taskipy.tasks]
-lint = "python -m pylint text2error tests -v --output-format colorized --disable duplicate-code,bad-continuation --generated-members=torch.*"
+lint = "python -m pylint text2error tests -v --output-format colorized --disable duplicate-code,bad-continuation"
 types = "python -m mypy text2error tests --ignore-missing-imports"
 format = "python -m black text2error tests"
 test = "python -m pytest --cov=text2error tests --verbose"
