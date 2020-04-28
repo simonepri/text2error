@@ -12,7 +12,7 @@ def non_adjacent_choice(
     array).
     """
     # pylint: disable=invalid-name
-    # TODO: The current implementation is yet uniform.
+    # TODO: The current implementation is not always uniform yet.
 
     rng = rng if rng is not None else np.random.default_rng()
 
