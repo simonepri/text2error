@@ -85,7 +85,10 @@ class MaskedLMRandomTextEditsGenerator(RandomTextEditsGenerator):
         orig_ids_at_masked_indexes: pt.Tensor,
     ) -> Tuple[pt.Tensor, pt.Tensor]:
         # pylint: disable=too-many-locals,too-many-arguments
+        masked_indexes = masked_indexes.to(self.model.device)
         pred_ids = masked_ids.to(self.model.device, copy=True)
+        non_special_mask = non_special_mask.to(self.model.device)
+        orig_ids_at_masked_indexes = orig_ids_at_masked_indexes.to(self.model.device)
         pred_non_special_ids = pred_ids[non_special_mask]
 
         indexes_iterator = zip(
@@ -128,13 +131,14 @@ class MaskedLMRandomTextEditsGenerator(RandomTextEditsGenerator):
             masks_probs = masks_logits.softmax(1)
             del masks_logits
 
+            masks_probs = masks_probs.cpu()
             masks_pred_ids = np.empty(masks_probs.size(0), dtype=np.long)
             for i, mask_prob in enumerate(masks_probs):
                 token_id = self.rng.choice(mask_prob.size(0), 1, p=mask_prob)
                 masks_pred_ids[i] = token_id
             del masks_probs
             # masks_pred_ids.shape = [tokens_to_replace]
-            masks_pred_ids = pt.from_numpy(masks_pred_ids)
+            masks_pred_ids = pt.from_numpy(masks_pred_ids).to(self.model.device)
 
             # Update masks with predictions
             pred_non_special_ids.scatter_(0, indexes, masks_pred_ids)
