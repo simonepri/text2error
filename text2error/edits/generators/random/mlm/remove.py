@@ -1,38 +1,43 @@
 from typing import *  # pylint: disable=wildcard-import,unused-wildcard-import
 
-import numpy as np
-import torch as pt
-
 from .abc.base import MaskedLMRandomTextEditsGenerator
+from ....edit import TextEdit
 
 
 class RemoveRandomMLMToken(MaskedLMRandomTextEditsGenerator):
     # pylint: disable=too-few-public-methods
 
-    def generate(self, text: str) -> str:
-        non_special_ids = self._tokenize(text)
+    def generate(self, text: str) -> List[TextEdit]:
+        encoding = self._encode(text)
+        token_ids = encoding["input_ids"]
+        num_tokens = len(token_ids)
 
-        remotions = self._get_edits_num(len(non_special_ids), len(non_special_ids))
+        remotions = self._get_edits_num(num_tokens, num_tokens)
         if remotions == 0:
-            return text
-        if remotions > len(non_special_ids):
+            return []
+        if remotions > num_tokens:
             raise ValueError("Too many remotions")
 
-        return self._remove(non_special_ids, remotions)
+        indexes = self.rng.choice(num_tokens, remotions, replace=False)
+        indexes.sort()
 
-    def _remove(self, non_special_ids: pt.Tensor, remotions: int) -> str:
-        indexes_to_remove = self.rng.choice(
-            len(non_special_ids), remotions, replace=False
-        )
-        return self._remove_at_indexes(non_special_ids, indexes_to_remove)
+        edits = []
+        offset = 0
+        for i in indexes:
+            word_span = encoding.token_to_chars(i)
+            start, end = word_span.start, word_span.end
 
-    def _remove_at_indexes(self, non_special_ids: pt.Tensor, indexes: np.array,) -> str:
-        # remaining_indexes.shape = [len(non_special_ids) - len(indexes)]
-        remaining_indexes = pt.from_numpy(
-            np.setdiff1d(np.arange(len(non_special_ids)), indexes, assume_unique=True)
-        )
+            if start + offset == 0:
+                # If we are at the beginning of the text.
+                if end != len(text) and text[end] == " ":
+                    # Remove the space after the token if present.
+                    end += 1
+            else:
+                # Otherwise
+                if start > 0 and text[start - 1] == " ":
+                    # Remove the space before the token if present.
+                    start -= 1
 
-        # output_ids.shape = [len(non_special_ids) - len(indexes)]
-        output_ids = non_special_ids[remaining_indexes]
-
-        return self.tokenizer.decode(output_ids.tolist())
+            edits.append(TextEdit("", start=start + offset, end=end + offset))
+            offset -= end - start
+        return edits

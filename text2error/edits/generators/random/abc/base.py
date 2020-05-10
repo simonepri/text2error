@@ -4,6 +4,7 @@ from abc import abstractmethod
 import numpy as np
 
 from ...abc.base import TextEditsGenerator
+from ....edit import TextEdit
 from .....utils.misc import resolve_optional
 
 
@@ -20,5 +21,5 @@ class RandomTextEditsGenerator(TextEditsGenerator):
         self.rng: np.random.Generator = resolve_optional(rng, np.random.default_rng())
 
     @abstractmethod
-    def generate(self, text: str) -> str:
+    def generate(self, text: str) -> List[TextEdit]:
         ...  # pragma: no cover

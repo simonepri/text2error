@@ -1,40 +1,46 @@
 from typing import *  # pylint: disable=wildcard-import,unused-wildcard-import
 
-import numpy as np
-import torch as pt
-
 from .abc.base import MaskedLMRandomTextEditsGenerator
+from ....edit import TextEdit
 from .....utils.random import non_adjacent_choice
 
 
 class TransposeRandomMLMToken(MaskedLMRandomTextEditsGenerator):
     # pylint: disable=too-few-public-methods
 
-    def generate(self, text: str) -> str:
-        non_special_ids = self._tokenize(text)
+    def generate(self, text: str) -> List[TextEdit]:
+        encoding = self._encode(text)
+        token_ids = encoding["input_ids"]
+        num_tokens = len(token_ids)
 
-        transpositions = self._get_edits_num(
-            len(non_special_ids), len(non_special_ids) // 2
-        )
+        transpositions = self._get_edits_num(num_tokens, num_tokens // 2)
         if transpositions == 0:
-            return text
-        if transpositions > len(non_special_ids) // 2:
+            return []
+        if transpositions > num_tokens // 2:
             raise ValueError("Too many transpositions")
 
-        return self._transpose(non_special_ids, transpositions)
+        indexes = non_adjacent_choice(num_tokens - 1, transpositions, rng=self.rng)
+        # The indexes from non_adjacent_choice are already sorted.
 
-    def _transpose(self, non_special_ids: pt.Tensor, transpositions: int) -> str:
-        indexes_to_transpose = non_adjacent_choice(
-            len(non_special_ids) - 1, transpositions, rng=self.rng
-        )
-        return self._transpose_at_indexes(non_special_ids, indexes_to_transpose)
+        edits = []
+        offset = 0
+        for i in indexes:
+            word_span_1 = encoding.token_to_chars(i)
+            word_span_2 = encoding.token_to_chars(i + 1)
+            start, end = word_span_1.start, word_span_2.end
+            if start > 0 and text[start - 1] == " ":
+                # Remove the space before the first token if present.
+                start -= 1
 
-    def _transpose_at_indexes(
-        self, non_special_ids: pt.Tensor, indexes: np.array,
-    ) -> str:
-        # output_ids.shape = [len(non_special_ids)]
-        output_ids = non_special_ids.clone()
-        output_ids[indexes] = non_special_ids[indexes + 1]
-        output_ids[indexes + 1] = non_special_ids[indexes]
+            new_text = self._id_to_string(token_ids[i + 1]) + self._id_to_string(
+                token_ids[i]
+            )
+            if start + offset == 0:
+                # If we are the beginning of the text.
+                if new_text[0] == " ":
+                    # Avoid inserting the space before the token if present.
+                    new_text = new_text[1:]
 
-        return self.tokenizer.decode(output_ids.tolist())
+            edits.append(TextEdit(new_text, start=start + offset, end=end + offset))
+            offset += len(new_text) - (end - start)
+        return edits

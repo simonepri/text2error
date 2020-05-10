@@ -1,7 +1,7 @@
 from typing import *  # pylint: disable=wildcard-import,unused-wildcard-import
 
+from .edits.edit import TextEdit
 from .edits.generators.abc.base import TextEditsGenerator
-
 from .utils.misc import resolve_optional, resolve_value_or_callable
 
 
@@ -26,13 +26,15 @@ class Text2ErrorGenerator:
     def __len__(self) -> int:
         return len(self.generators)
 
-    def __call__(self, text: str) -> str:
+    def __call__(self, text: str) -> Tuple[str, List[TextEdit]]:
         generation_order = resolve_value_or_callable(self.generation_order, len(self))
         generation_mask = resolve_value_or_callable(self.generation_mask, len(self))
 
+        all_edits = []
         for idx in generation_order:
             if not generation_mask[idx]:
                 continue
-            text = self.generators[idx].generate(text)
-
-        return text
+            edits = self.generators[idx].generate(text)
+            all_edits.extend(edits)
+            text = TextEdit.apply(text, edits)
+        return text, all_edits

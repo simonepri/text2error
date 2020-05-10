@@ -2,6 +2,7 @@ from typing import *  # pylint: disable=wildcard-import,unused-wildcard-import
 from abc import ABC, abstractmethod
 
 from ....utils.misc import resolve_optional_value_or_callable
+from ...edit import TextEdit
 
 
 class TextEditsGenerator(ABC):
@@ -22,5 +23,5 @@ class TextEditsGenerator(ABC):
         return edits_num
 
     @abstractmethod
-    def generate(self, text: str) -> str:
+    def generate(self, text: str) -> List[TextEdit]:
         ...  # pragma: no cover

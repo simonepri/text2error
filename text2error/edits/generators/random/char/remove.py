@@ -1,32 +1,25 @@
 from typing import *  # pylint: disable=wildcard-import,unused-wildcard-import
 
-import numpy as np
-
 from ..abc.base import RandomTextEditsGenerator
+from ....edit import TextEdit
 
 
 class RemoveRandomChar(RandomTextEditsGenerator):
     # pylint: disable=too-few-public-methods
 
-    def generate(self, text: str) -> str:
-        chars = np.array(list(text))
+    def generate(self, text: str) -> List[TextEdit]:
+        chars_num = len(text)
 
-        remotions = self._get_edits_num(len(chars), len(chars))
+        remotions = self._get_edits_num(chars_num, chars_num)
         if remotions == 0:
-            return text
-        if remotions > len(chars):
+            return []
+        if remotions > chars_num:
             raise ValueError("Too many remotions")
 
-        return self._remove(chars, remotions)
+        indexes = self.rng.choice(chars_num, remotions, replace=False)
+        indexes.sort()
 
-    def _remove(self, chars: np.array, remotions: int) -> str:
-        indexes_to_remove = self.rng.choice(len(chars), remotions, replace=False)
-        return self._remove_at_indexes(chars, indexes_to_remove)
+        start_gen = (s - i for i, s in enumerate(indexes))
+        edits = [TextEdit("", start=s, end=s + 1) for s in start_gen]
 
-    def _remove_at_indexes(self, chars: np.array, indexes: np.array) -> str:
-        # pylint: disable=no-self-use
-        remaining_indexes = np.setdiff1d(
-            np.arange(len(chars)), indexes, assume_unique=True
-        )
-        new_chars = chars[remaining_indexes]
-        return "".join(new_chars)
+        return edits

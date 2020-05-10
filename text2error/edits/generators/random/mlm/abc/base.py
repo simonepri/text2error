@@ -8,8 +8,10 @@ import numpy as np
 import torch as pt
 from transformers import AutoModelWithLMHead, AutoTokenizer
 from transformers import PreTrainedModel, PreTrainedTokenizer
+from transformers.tokenization_utils import BatchEncoding
 
 from ...abc.base import RandomTextEditsGenerator
+from .....edit import TextEdit
 from ......utils.cache import KeyedSingletonLoader
 from ......utils.misc import resolve_optional, resolve_value_or_callable
 
@@ -45,20 +47,20 @@ class MaskedLMRandomTextEditsGenerator(RandomTextEditsGenerator):
         self.__unload_model(self.model_name)
 
     @abstractmethod
-    def generate(self, text: str) -> str:
+    def generate(self, text: str) -> List[TextEdit]:
         ...  # pragma: no cover
 
-    def _tokenize(self, text: str) -> pt.Tensor:
-        encoding = self.tokenizer.encode_plus(
-            text, add_special_tokens=False, return_tensors="pt",
-        )
+    def _id_to_string(self, token_id: int) -> str:
+        tokens = [self.tokenizer.pad_token_id, token_id]
+        offset = len(self.tokenizer.pad_token)
+        text = self.tokenizer.decode(tokens)
+        return text[offset:]
 
-        # non_special_ids.shape = [?]
-        non_special_ids = encoding["input_ids"].to(dtype=pt.long)[0]
+    def _encode(self, text: str) -> BatchEncoding:
+        encoding = self.tokenizer.encode_plus(text, add_special_tokens=False)
+        return encoding
 
-        return non_special_ids
-
-    def _tokenize_for_model(self, text: str) -> Tuple[pt.Tensor, pt.Tensor, pt.Tensor]:
+    def _encode_for_model(self, text: str) -> BatchEncoding:
         encoding = self.tokenizer.encode_plus(
             text,
             add_special_tokens=True,
@@ -67,15 +69,7 @@ class MaskedLMRandomTextEditsGenerator(RandomTextEditsGenerator):
             return_special_tokens_mask=True,
             return_tensors="pt",
         )
-
-        # ids.shape = [splits, max_len]
-        ids = encoding["input_ids"].to(dtype=pt.long)
-        # non_special_mask.shape = [splits, max_len]
-        non_special_mask = encoding["special_tokens_mask"] == 0
-        # non_special_ids.shape = [?]
-        non_special_ids = ids[non_special_mask]
-
-        return ids, non_special_mask, non_special_ids
+        return encoding
 
     def _predict_masks_at_indexes(
         self,
@@ -95,6 +89,7 @@ class MaskedLMRandomTextEditsGenerator(RandomTextEditsGenerator):
             masked_indexes.unsqueeze(-1 if self.sequential_masking else 0),
             orig_ids_at_masked_indexes.unsqueeze(-1 if self.sequential_masking else 0),
         )
+        # pylint: disable=not-callable
         special_ids = pt.tensor(self.tokenizer.all_special_ids)
         for indexes, orig_ids_at_indexes in indexes_iterator:
             with pt.no_grad():

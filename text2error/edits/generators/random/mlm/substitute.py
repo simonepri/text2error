@@ -1,60 +1,62 @@
 from typing import *  # pylint: disable=wildcard-import,unused-wildcard-import
 
-import numpy as np
 import torch as pt
 
 from .abc.base import MaskedLMRandomTextEditsGenerator
+from ....edit import TextEdit
 
 
 class SubstituteRandomMLMToken(MaskedLMRandomTextEditsGenerator):
     # pylint: disable=too-few-public-methods
 
-    def generate(self, text: str) -> str:
-        ids, non_special_mask, non_special_ids = self._tokenize_for_model(text)
+    def generate(self, text: str) -> List[TextEdit]:
+        # pylint: disable=too-many-locals,invalid-name
 
-        substitutions = self._get_edits_num(len(non_special_ids), len(non_special_ids))
+        encoding = self._encode(text)
+        token_ids = encoding["input_ids"]
+        num_tokens = len(token_ids)
+
+        substitutions = self._get_edits_num(num_tokens, num_tokens)
         if substitutions == 0:
-            return text
-        if substitutions > len(non_special_ids):
+            return []
+        if substitutions > num_tokens:
             raise ValueError("Too many substitutions")
 
-        return self._substitute(ids, non_special_mask, non_special_ids, substitutions)
+        indexes = self.rng.choice(num_tokens, substitutions, replace=False)
+        indexes.sort()
 
-    def _substitute(
-        self,
-        ids: pt.Tensor,
-        non_special_mask: pt.Tensor,
-        non_special_ids: pt.Tensor,
-        substitutions: int,
-    ) -> str:
-        # pylint: disable=too-many-arguments
-
-        indexes_to_substitute = self.rng.choice(
-            len(non_special_ids), substitutions, replace=False
+        model_encoding = self._encode_for_model(text)
+        ids = model_encoding["input_ids"]
+        token_mask = model_encoding["special_tokens_mask"] == 0
+        # pylint: disable=not-callable
+        pt_token_ids = pt.tensor(token_ids)
+        pt_indexes = pt.from_numpy(indexes)
+        masked_ids = pt_token_ids.scatter(0, pt_indexes, self.tokenizer.mask_token_id)
+        masked_ids = ids.masked_scatter(token_mask, masked_ids)
+        _, new_token_ids = self._predict_masks_at_indexes(
+            pt_indexes, masked_ids, token_mask, pt_token_ids[indexes]
         )
-        return self._substitute_at_indexes(
-            ids, non_special_mask, non_special_ids, indexes_to_substitute
-        )
+        predictions = new_token_ids[indexes]
 
-    def _substitute_at_indexes(
-        self,
-        ids: pt.Tensor,
-        non_special_mask: pt.Tensor,
-        non_special_ids: pt.Tensor,
-        indexes: np.array,
-    ) -> str:
-        # pylint: disable=too-many-arguments
+        edits = []
+        offset = 0
+        for pi, i in enumerate(indexes):
+            word_span = encoding.token_to_chars(i)
 
-        indexes = pt.from_numpy(indexes)
+            start = word_span.start
+            end = word_span.end
+            if start > 0 and text[start - 1] == " ":
+                # Remove the space before the token if present.
+                start -= 1
 
-        # masked_non_special_ids.shape = [len(non_special_ids)]
-        masked_non_special_ids = non_special_ids.scatter(
-            0, indexes, self.tokenizer.mask_token_id
-        )
-        # masked_ids.shape = [splits, max_len]
-        masked_ids = ids.masked_scatter(non_special_mask, masked_non_special_ids)
-        _, new_non_special_ids = self._predict_masks_at_indexes(
-            indexes, masked_ids, non_special_mask, non_special_ids[indexes]
-        )
+            new_text = self._id_to_string(int(predictions[pi].item()))
+            if start + offset == 0:
+                # If we are at the beginning of a sentence.
+                if new_text[0] == " ":
+                    # Avoid inserting the space before the token if present.
+                    new_text = new_text[1:]
 
-        return self.tokenizer.decode(new_non_special_ids.tolist())
+            edits.append(TextEdit(new_text, start=start + offset, end=end + offset))
+            offset += len(new_text) - (end - start)
+
+        return edits

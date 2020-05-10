@@ -1,44 +1,62 @@
 from typing import *  # pylint: disable=wildcard-import,unused-wildcard-import
 
+from array import array
+
 import numpy as np
 import torch as pt
 
 from .abc.base import MaskedLMRandomTextEditsGenerator
+from ....edit import TextEdit
 
 
 class InsertRandomMLMToken(MaskedLMRandomTextEditsGenerator):
     # pylint: disable=too-few-public-methods
 
-    def generate(self, text: str) -> str:
-        non_special_ids = self._tokenize(text)
+    def generate(self, text: str) -> List[TextEdit]:
+        # pylint: disable=too-many-locals,invalid-name
 
-        insertions = self._get_edits_num(len(non_special_ids), None)
+        encoding = self._encode(text)
+        token_ids = encoding["input_ids"]
+        num_tokens = len(token_ids)
+
+        insertions = self._get_edits_num(num_tokens, None)
         if insertions == 0:
-            return text
+            return []
 
-        return self._insert(non_special_ids, insertions)
-
-    def _insert(self, non_special_ids: pt.Tensor, insertions: int) -> str:
-        indexes_to_insert = self.rng.choice(
-            len(non_special_ids) or 1, insertions, replace=True
-        )
-        return self._insert_at_indexes(non_special_ids, indexes_to_insert)
-
-    def _insert_at_indexes(self, non_special_ids: pt.Tensor, indexes: np.array) -> str:
+        indexes = self.rng.choice(num_tokens + 1, insertions, replace=True)
         indexes.sort()
-        # masked_ids.shape = [len(non_special_ids) + len(indexes)]
-        non_special_ids = np.insert(
-            non_special_ids, indexes, self.tokenizer.mask_token_id
+
+        token_ids = token_ids if len(token_ids) > 0 else array("l")
+        masked_token_ids = np.insert(token_ids, indexes, self.tokenizer.mask_token_id)
+        pt_masked_token_ids = pt.from_numpy(masked_token_ids)
+        # TODO: Avoid roundtrip decoding and encoding.
+        new_text = self.tokenizer.decode(pt_masked_token_ids.tolist())
+        new_encoding = self._encode_for_model(new_text)
+        masked_ids = new_encoding["input_ids"]
+        token_mask = new_encoding["special_tokens_mask"] == 0
+        mask_indexes = indexes + np.arange(len(indexes))
+        pt_mask_indexes = pt.from_numpy(mask_indexes)
+        _, new_token_ids = self._predict_masks_at_indexes(
+            pt_mask_indexes, masked_ids, token_mask, pt_masked_token_ids[mask_indexes],
         )
-        indexes += np.arange(indexes.size)
+        predictions = new_token_ids[mask_indexes]
 
-        # TODO: Avoid to decode and encode.
-        text = self.tokenizer.decode(non_special_ids.tolist())
-        masked_ids, non_special_mask, _ = self._tokenize_for_model(text)
+        edits = []
+        offset = 0
+        for pi, i in enumerate(indexes):
+            start = 0 if i - 1 == -1 else encoding.token_to_chars(i - 1).end
 
-        indexes = pt.from_numpy(indexes)
-        _, new_non_special_ids = self._predict_masks_at_indexes(
-            indexes, masked_ids, non_special_mask, non_special_ids[indexes]
-        )
+            new_text = self._id_to_string(int(predictions[pi].item()))
+            if start + offset == 0:
+                # If we are at the beginning of a sentence.
+                if new_text[0] == " ":
+                    # Avoid inserting the space before the token if present.
+                    new_text = new_text[1:]
+                if new_text[-1] != " ":
+                    # Add a space after the token if not present.
+                    new_text = new_text + " "
 
-        return self.tokenizer.decode(new_non_special_ids.tolist())
+            edits.append(TextEdit(new_text, start=start + offset))
+            offset += len(new_text)
+
+        return edits
