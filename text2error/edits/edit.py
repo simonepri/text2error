@@ -26,7 +26,7 @@ class TextEdit(_TextEdit):
         if end is None:
             end = start
         start = cast(int, start)
-        end = cast(int, start)
+        end = cast(int, end)
 
         if start < 0 or end < 0:
             raise ValueError("The start and end position must be non negative")
