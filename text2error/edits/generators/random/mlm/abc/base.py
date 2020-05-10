@@ -95,6 +95,7 @@ class MaskedLMRandomTextEditsGenerator(RandomTextEditsGenerator):
             masked_indexes.unsqueeze(-1 if self.sequential_masking else 0),
             orig_ids_at_masked_indexes.unsqueeze(-1 if self.sequential_masking else 0),
         )
+        special_ids = pt.tensor(self.tokenizer.all_special_ids)
         for indexes, orig_ids_at_indexes in indexes_iterator:
             with pt.no_grad():
                 logits = self.model(pred_ids)[0]
@@ -127,6 +128,8 @@ class MaskedLMRandomTextEditsGenerator(RandomTextEditsGenerator):
                 del worst_k_ids
             # Filter original ids
             masks_logits.scatter_(1, orig_ids_at_indexes.unsqueeze(1), -1e10)
+            # Filter special ids
+            masks_logits.index_fill_(1, special_ids, -1e10)
             # masks_probs.shape = [tokens_to_replace, vocab_size]
             masks_probs = masks_logits.softmax(1)
             del masks_logits
