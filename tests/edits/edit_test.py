@@ -2,10 +2,7 @@
 import pytest  # pylint: disable=unused-import
 
 from text2error.edits.edit import TextEdit
-from text2error.edits.edit import (
-    TextEditBackwardEditException,
-    TextEditOutOfBoundsException,
-)
+from text2error.edits.edit import TextEditOutOfBoundsException
 
 
 def describe_init():
@@ -48,12 +45,6 @@ def describe_apply():
         edit = TextEdit("", start=0, end=1)
         with pytest.raises(TextEditOutOfBoundsException):
             TextEdit.apply("A", [edit, edit])
-        edit_1 = TextEdit("", start=1, end=2)
-        edit_2 = TextEdit("", start=0, end=1)
-        with pytest.raises(TextEditBackwardEditException):
-            TextEdit.apply("AB", [edit_1, edit_2])
-        with pytest.raises(TextEditBackwardEditException):
-            TextEdit.apply("ABC", [edit_1, edit_2, edit_1])
         edit_1 = TextEdit("I", start=1, end=1)
         edit_2 = TextEdit("I", start=2, end=3)
         edit_2 = TextEdit("I", start=2, end=3)
@@ -96,3 +87,11 @@ def describe_apply():
             TextEdit("!", start=10, end=10),
         ]
         assert TextEdit.apply("Hello", edits) == "Hello Word!"
+
+    def should_work_with_backward_edits():
+        edit_0 = TextEdit("", start=0, end=1)
+        edit_1 = TextEdit("", start=1, end=2)
+        edit_2 = TextEdit("", start=2, end=3)
+        assert TextEdit.apply("AB", [edit_1, edit_0]) == ""
+        assert TextEdit.apply("ABC", [edit_1, edit_0, edit_0]) == ""
+        assert TextEdit.apply("ABC", [edit_2, edit_0]) == "B"

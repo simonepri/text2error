@@ -7,10 +7,6 @@ class _TextEdit(NamedTuple):
     end: int
 
 
-class TextEditBackwardEditException(ValueError):
-    ...
-
-
 class TextEditOutOfBoundsException(ValueError):
     ...
 
@@ -36,52 +32,39 @@ class TextEdit(_TextEdit):
 
     @staticmethod
     def apply(text: str, edits: List["TextEdit"]) -> str:
-        text_len, edits_len = len(text), len(edits)
-        if edits_len == 0:
-            return text
-
-        builder = []
-        i, j, o = 0, 0, 0
-        while i < text_len:
-            if j == edits_len:
-                builder.append(text[i:])
-                break
-            if edits[j].start < i + o:
-                raise TextEditBackwardEditException(
-                    "Illegal backward edit found at index %d: "
-                    "Applying %s when the iterator is at %d"
-                    % (j, edits[j], text_len + o)
-                )
-            if edits[j].end > text_len + o:
-                builder.append(text[i:])
-                raise TextEditOutOfBoundsException(
-                    "Illegal out-of-bounds edit found at index %d: "
-                    "Applying %s to `%s`" % (j, edits[j], "".join(builder))
-                )
-            if i + o == edits[j].start:
+        # pylint: disable=invalid-name
+        edits_len = len(edits)
+        j = 0
+        while j < edits_len:
+            i = 0
+            o = 0
+            builder = []
+            text_len = len(text)
+            while j < edits_len and i < text_len:
+                if edits[j].end > text_len + o:
+                    break  # Out-of-bounds.
+                if edits[j].start < i + o:
+                    break  # Backward edit.
+                if edits[j].start > i + o:
+                    builder.append(text[i : edits[j].start - o])
                 if edits[j].text != "":
                     builder.append(edits[j].text)
-                do = len(edits[j].text) - (edits[j].end - edits[j].start)
                 i = edits[j].end - o
+                o += len(edits[j].text) - (edits[j].end - edits[j].start)
                 j += 1
-                o += do
-                continue
-            builder.append(text[i : edits[j].start - o])
-            i = edits[j].start - o
-        while j < edits_len:
-            if edits[j].start < text_len + o:
-                raise TextEditBackwardEditException(
-                    "Illegal backward edit found at index %d: "
-                    "Applying %s when the iterator is at %d"
-                    % (j, edits[j], text_len + o)
-                )
-            if edits[j].end > text_len + o:
+            if i < text_len:
+                builder.append(text[i:])
+            if j < edits_len and edits[j].end > text_len + o:
+                builder.append(text[i:])
                 raise TextEditOutOfBoundsException(
                     "Illegal out-of-bounds edit found at index %d: "
                     "Applying %s to `%s`" % (j, edits[j], "".join(builder))
                 )
-            builder.append(edits[j].text)
-            o += len(edits[j].text)
-            j += 1
+            while j < edits_len and edits[j].start == edits[j].end == text_len + o:
+                # Insertion at the end.
+                builder.append(edits[j].text)
+                o += len(edits[j].text)
+                j += 1
+            text = "".join(builder)
 
-        return "".join(builder)
+        return text
