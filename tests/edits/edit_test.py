@@ -42,7 +42,7 @@ def describe_apply():
         edit = TextEdit("", start=0, end=len(text) + 1)
         with pytest.raises(TextEditOutOfBoundsException):
             TextEdit.apply(text, [edit])
-        edit = TextEdit(" World!", start=6, end=6)
+        edit = TextEdit(" World!", start=6)
         with pytest.raises(TextEditOutOfBoundsException):
             TextEdit.apply("Hello", [edit])
         edit = TextEdit("", start=0, end=1)
@@ -54,6 +54,11 @@ def describe_apply():
             TextEdit.apply("AB", [edit_1, edit_2])
         with pytest.raises(TextEditBackwardEditException):
             TextEdit.apply("ABC", [edit_1, edit_2, edit_1])
+        edit_1 = TextEdit("I", start=1, end=1)
+        edit_2 = TextEdit("I", start=2, end=3)
+        edit_2 = TextEdit("I", start=2, end=3)
+        with pytest.raises(TextEditOutOfBoundsException):
+            TextEdit.apply("A", [edit_1, edit_2])
 
     def should_work_for_a_single_edit():
         # pos:  012345678901234567890123
@@ -63,17 +68,31 @@ def describe_apply():
         assert TextEdit.apply(text, [edit]) == "is an example text."
         edit = TextEdit("not ", start=8, end=8)
         assert TextEdit.apply(text, [edit]) == "This is not an example text."
-        edit = TextEdit("..", start=len(text), end=len(text))
+        edit = TextEdit("..", start=len(text))
         assert TextEdit.apply(text, [edit]) == "This is an example text..."
 
-        edit = TextEdit("", start=0, end=0)
+        edit = TextEdit("", start=0)
         assert TextEdit.apply(text, [edit]) == text
-        edit = TextEdit("", start=len(text), end=len(text))
+        edit = TextEdit("", start=len(text))
         assert TextEdit.apply(text, [edit]) == text
         edit = TextEdit("", start=0, end=len(text))
         assert TextEdit.apply(text, [edit]) == ""
 
-        edit = TextEdit("", start=0, end=0)
+        edit = TextEdit("", start=0)
         assert TextEdit.apply("", [edit]) == ""
-        edit = TextEdit("A", start=0, end=0)
+        edit = TextEdit("A", start=0)
         assert TextEdit.apply("", [edit]) == "A"
+
+    def should_work_for_multiple_edits():
+        # pos:  012345678901234567890123
+        text = "This is an example text."
+
+        edit_1 = TextEdit("", start=7, end=10)
+        edit_2 = TextEdit("!", start=len(text) - (10 - 7))
+        assert TextEdit.apply(text, [edit_1, edit_2]) == "This is example text.!"
+        edits = [
+            TextEdit(" ", start=5, end=5),
+            TextEdit("Word", start=6, end=6),
+            TextEdit("!", start=10, end=10),
+        ]
+        assert TextEdit.apply("Hello", edits) == "Hello Word!"
