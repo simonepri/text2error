@@ -29,13 +29,13 @@ transformers = "^2.9.0"
 lm_scorer = "~0.3.2"
 
 [tool.poetry.dev-dependencies]
-taskipy = "^1.2.0"
+taskipy = "^1.2.1"
 black = "~19.10b0"
-pylint = "^2.4.4"
+pylint = "^2.5.2"
 mypy = "~0.770"
-pytest = "^5.4.1"
+pytest = "^5.4.2"
 pytest-cov = "^2.8.1"
-pytest-mock = "^3.0.0"
+pytest-mock = "^3.1.0"
 pytest-sugar = "~0.9.3"
 pytest-describe = "^1.0.0"
 
