@@ -81,6 +81,7 @@ class TextEdit(_TextEdit):
                     "Applying %s to `%s`" % (j, edits[j], "".join(builder))
                 )
             builder.append(edits[j].text)
+            o += len(edits[j].text)
             j += 1
 
         return "".join(builder)
