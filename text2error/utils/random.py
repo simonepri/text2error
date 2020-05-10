@@ -1,11 +1,11 @@
 from typing import *  # pylint: disable=wildcard-import,unused-wildcard-import
 
-import numpy as np
+import random
 
 
-def non_adjacent_choice(
-    n: int, m: int, rng: Optional[np.random.Generator] = None
-) -> np.array:
+def non_adjacent_sample(
+    n: int, m: int, rng: Optional[random.Random] = None
+) -> List[int]:
     """
     Generates a uniform random sample from a given 1-D array such that
     elements chosen are not adjacent (i.e. they are at distance >= 1 in the
@@ -14,7 +14,9 @@ def non_adjacent_choice(
     # pylint: disable=invalid-name
     # TODO: The current implementation is not always uniform yet.
 
-    rng = rng if rng is not None else np.random.default_rng()
+    if rng is None:
+        # pylint: disable=protected-access
+        rng = random._inst  # type: ignore
 
     odd = n % 2 == 1
     max_m = (n + 1) // 2
@@ -23,15 +25,16 @@ def non_adjacent_choice(
     if m > max_m:
         raise ValueError("m must be at most (n + 1) // 2.")
     if n == 0 or m == 0:
-        return np.empty(0, dtype=np.int)
+        return []
     if odd:
         n += 1
 
     max_b = n // 2
     if m == max_b:
-        pairs = np.arange(max_b)
+        pairs = list(range(max_b))
     else:
-        pairs = np.sort(rng.choice(max_b, m, replace=False))
+        pairs = rng.sample(range(max_b), k=m)
+        pairs.sort()
 
     # Compute a DP array for the pairs, each with two entry (can, cant), which is
     # equal to the number of ways of taking one element per pair, in the two cases:
@@ -42,8 +45,8 @@ def non_adjacent_choice(
     #     for the previous ones,
     #          this.cant := next.id == this.id + 1 if next.cant else next.can
     #          this.can := next.can + this.cant
-    dp = np.full((m, 2), 0, dtype=object)
-    dp[m - 1] = (2, 1)
+    dp = [[0, 0] for _ in range(m)]
+    dp[m - 1] = [2, 1]
     for i in range(m - 2, -1, -1):
         dp_c, dp_n = dp[i], dp[i + 1]
         dp_c[1] = dp_n[int(pairs[i + 1] == pairs[i] + 1)]
@@ -54,7 +57,7 @@ def non_adjacent_choice(
     # (i.e. pairs[current - 1] == pairs[current] - 1) and we took the second,
     # we're forced to take the second element again.
     # Otherwise we take the second with probability cant/can.
-    ans = np.zeros(m, dtype=np.int)
+    ans = [0 for i in range(m)]
     first_forbidden = 0 if odd else -1
     for i in range(m):
         element = pairs[i] * 2  # first element of the pair
@@ -62,7 +65,7 @@ def non_adjacent_choice(
             element += 1
         first_forbidden = element + 1
         ans[i] = element
-    if odd:
-        ans -= 1
+        if odd:
+            ans[i] -= 1
 
     return ans

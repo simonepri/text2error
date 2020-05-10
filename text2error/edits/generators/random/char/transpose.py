@@ -2,7 +2,7 @@ from typing import *  # pylint: disable=wildcard-import,unused-wildcard-import
 
 from ..abc.base import RandomTextEditsGenerator
 from ....edit import TextEdit
-from .....utils.random import non_adjacent_choice
+from .....utils.random import non_adjacent_sample
 
 
 class TransposeRandomChar(RandomTextEditsGenerator):
@@ -17,8 +17,8 @@ class TransposeRandomChar(RandomTextEditsGenerator):
         if transpositions > chars_num // 2:
             raise ValueError("Too many transpositions")
 
-        indexes = non_adjacent_choice(chars_num - 1, transpositions, rng=self.rng)
-        # The indexes from non_adjacent_choice are already sorted.
+        indexes = non_adjacent_sample(chars_num - 1, transpositions, rng=self.rng)
+        # The indexes from non_adjacent_sample are already sorted.
 
         start_gen = indexes
         text_gen = (text[i + 1 : None if i == 0 else i - 1 : -1] for i in indexes)

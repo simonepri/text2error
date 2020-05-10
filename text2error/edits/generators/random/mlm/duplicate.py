@@ -18,7 +18,7 @@ class DuplicateRandomMLMToken(MaskedLMRandomTextEditsGenerator):
         if duplications > num_tokens:
             raise ValueError("Too many duplications")
 
-        indexes = self.rng.choice(num_tokens, duplications, replace=False)
+        indexes = self.rng.sample(range(num_tokens), k=duplications)
         indexes.sort()
 
         edits = []

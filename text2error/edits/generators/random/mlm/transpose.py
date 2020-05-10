@@ -2,7 +2,7 @@ from typing import *  # pylint: disable=wildcard-import,unused-wildcard-import
 
 from .abc.base import MaskedLMRandomTextEditsGenerator
 from ....edit import TextEdit
-from .....utils.random import non_adjacent_choice
+from .....utils.random import non_adjacent_sample
 
 
 class TransposeRandomMLMToken(MaskedLMRandomTextEditsGenerator):
@@ -19,8 +19,8 @@ class TransposeRandomMLMToken(MaskedLMRandomTextEditsGenerator):
         if transpositions > num_tokens // 2:
             raise ValueError("Too many transpositions")
 
-        indexes = non_adjacent_choice(num_tokens - 1, transpositions, rng=self.rng)
-        # The indexes from non_adjacent_choice are already sorted.
+        indexes = non_adjacent_sample(num_tokens - 1, transpositions, rng=self.rng)
+        # The indexes from non_adjacent_sample are already sorted.
 
         edits = []
         offset = 0

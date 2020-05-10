@@ -16,7 +16,7 @@ class RemoveRandomChar(RandomTextEditsGenerator):
         if remotions > chars_num:
             raise ValueError("Too many remotions")
 
-        indexes = self.rng.choice(chars_num, remotions, replace=False)
+        indexes = self.rng.sample(range(chars_num), k=remotions)
         indexes.sort()
 
         start_gen = (s - i for i, s in enumerate(indexes))

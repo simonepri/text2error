@@ -18,7 +18,7 @@ class RemoveRandomMLMToken(MaskedLMRandomTextEditsGenerator):
         if remotions > num_tokens:
             raise ValueError("Too many remotions")
 
-        indexes = self.rng.choice(num_tokens, remotions, replace=False)
+        indexes = self.rng.sample(range(num_tokens), k=remotions)
         indexes.sort()
 
         edits = []

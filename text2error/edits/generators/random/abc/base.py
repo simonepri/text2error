@@ -1,7 +1,7 @@
 from typing import *  # pylint: disable=wildcard-import,unused-wildcard-import
 from abc import abstractmethod
 
-import numpy as np
+import random
 
 from ...abc.base import TextEditsGenerator
 from ....edit import TextEdit
@@ -13,12 +13,12 @@ class RandomTextEditsGenerator(TextEditsGenerator):
 
     def __init__(
         self,
-        rng: Optional[np.random.Generator] = None,
+        rng: Optional[random.Random] = None,
         edits_num: Optional[Union[int, Callable[[int, Optional[int]], int]]] = None,
     ) -> None:
         super().__init__(edits_num)
 
-        self.rng: np.random.Generator = resolve_optional(rng, np.random.default_rng())
+        self.rng = resolve_optional(rng, random._inst)  # type: ignore
 
     @abstractmethod
     def generate(self, text: str) -> List[TextEdit]:

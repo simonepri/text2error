@@ -23,7 +23,7 @@ class InsertRandomMLMToken(MaskedLMRandomTextEditsGenerator):
         if insertions == 0:
             return []
 
-        indexes = self.rng.choice(num_tokens + 1, insertions, replace=True)
+        indexes = np.array(self.rng.choices(range(num_tokens + 1), k=insertions))
         indexes.sort()
 
         token_ids = token_ids if len(token_ids) > 0 else array("l")

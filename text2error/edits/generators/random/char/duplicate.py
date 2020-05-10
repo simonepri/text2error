@@ -16,7 +16,7 @@ class DuplicateRandomChar(RandomTextEditsGenerator):
         if duplications > chars_num:
             raise ValueError("Too many duplications")
 
-        indexes = self.rng.choice(chars_num, duplications, replace=False)
+        indexes = self.rng.sample(range(chars_num), k=duplications)
         indexes.sort()
 
         start_gen = (s + i for i, s in enumerate(indexes))

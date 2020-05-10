@@ -22,7 +22,7 @@ class SubstituteRandomMLMToken(MaskedLMRandomTextEditsGenerator):
         if substitutions > num_tokens:
             raise ValueError("Too many substitutions")
 
-        indexes = self.rng.choice(num_tokens, substitutions, replace=False)
+        indexes = self.rng.sample(range(num_tokens), k=substitutions)
         indexes.sort()
 
         model_encoding = self._encode_for_model(text)
@@ -30,7 +30,7 @@ class SubstituteRandomMLMToken(MaskedLMRandomTextEditsGenerator):
         token_mask = model_encoding["special_tokens_mask"] == 0
         # pylint: disable=not-callable
         pt_token_ids = pt.tensor(token_ids)
-        pt_indexes = pt.from_numpy(indexes)
+        pt_indexes = pt.tensor(indexes)
         masked_ids = pt_token_ids.scatter(0, pt_indexes, self.tokenizer.mask_token_id)
         masked_ids = ids.masked_scatter(token_mask, masked_ids)
         _, new_token_ids = self._predict_masks_at_indexes(
