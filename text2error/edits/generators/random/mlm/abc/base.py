@@ -90,7 +90,9 @@ class MaskedLMRandomTextEditsGenerator(RandomTextEditsGenerator):
             orig_ids_at_masked_indexes.unsqueeze(-1 if self.sequential_masking else 0),
         )
         # pylint: disable=not-callable
-        special_ids = pt.tensor(self.tokenizer.all_special_ids)
+        special_ids = pt.tensor(
+            self.tokenizer.all_special_ids, device=self.model.device
+        )
         for indexes, orig_ids_at_indexes in indexes_iterator:
             with pt.no_grad():
                 logits = self.model(pred_ids)[0]
@@ -139,7 +141,7 @@ class MaskedLMRandomTextEditsGenerator(RandomTextEditsGenerator):
                 token_id = self.rng.choices(tokens, k=1, cum_weights=cweights)[0]
                 masks_pred_ids[i] = token_id
             del masks_probs
-            masks_pred_ids.to(self.model.device)
+            masks_pred_ids = masks_pred_ids.to(self.model.device)
 
             # Update masks with predictions
             pred_non_special_ids.scatter_(0, indexes, masks_pred_ids)
