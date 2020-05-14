@@ -1,5 +1,7 @@
 from typing import *  # pylint: disable=wildcard-import,unused-wildcard-import
 
+from transformers.tokenization_utils import BatchEncoding
+
 from .abc.base import MaskedLMRandomTextEditsGenerator
 from ....edit import TextEdit
 
@@ -9,16 +11,16 @@ class RemoveRandomMLMToken(MaskedLMRandomTextEditsGenerator):
 
     def generate(self, text: str) -> List[TextEdit]:
         encoding = self._encode(text)
-        token_ids = encoding["input_ids"]
-        num_tokens = len(token_ids)
+        indexes = self._get_possible_indexes(encoding)
+        num_pos = len(indexes)
 
-        remotions = self._get_edits_num(num_tokens, num_tokens)
+        remotions = self._get_edits_num(num_pos, num_pos)
         if remotions == 0:
             return []
-        if remotions > num_tokens:
+        if remotions > num_pos:
             raise ValueError("Too many remotions")
 
-        indexes = self.rng.sample(range(num_tokens), k=remotions)
+        indexes = self.rng.sample(indexes, k=remotions)
         indexes.sort()
 
         edits = []
@@ -41,3 +43,12 @@ class RemoveRandomMLMToken(MaskedLMRandomTextEditsGenerator):
             edits.append(TextEdit("", start=start + offset, end=end + offset))
             offset -= end - start
         return edits
+
+    def _get_possible_indexes(self, encoding: BatchEncoding) -> List[int]:
+        num_tok = len(encoding["input_ids"])
+        indexes = [0]
+        i = self._get_next_char_span_index(encoding, 0)
+        while i < num_tok:
+            indexes.append(i)
+            i = self._get_next_char_span_index(encoding, i)
+        return indexes

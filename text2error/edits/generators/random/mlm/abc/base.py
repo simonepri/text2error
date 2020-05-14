@@ -17,8 +17,8 @@ from ......utils.misc import resolve_optional, resolve_value_or_callable
 
 
 class MaskedLMRandomTextEditsGenerator(RandomTextEditsGenerator):
-    models_cache = KeyedSingletonLoader()
     # pylint: disable=too-few-public-methods
+    models_cache = KeyedSingletonLoader()
 
     def __init__(
         self,
@@ -50,8 +50,8 @@ class MaskedLMRandomTextEditsGenerator(RandomTextEditsGenerator):
     def generate(self, text: str) -> List[TextEdit]:
         ...  # pragma: no cover
 
-    def _id_to_string(self, token_id: int) -> str:
-        tokens = [self.tokenizer.pad_token_id, token_id]
+    def _ids_to_string(self, token_ids: List[int]) -> str:
+        tokens = [self.tokenizer.pad_token_id, *token_ids]
         offset = len(self.tokenizer.pad_token)
         text = self.tokenizer.decode(tokens)
         return text[offset:]
@@ -70,6 +70,21 @@ class MaskedLMRandomTextEditsGenerator(RandomTextEditsGenerator):
             return_tensors="pt",
         )
         return encoding
+
+    @classmethod
+    def _get_next_char_span_index(cls, encoding: BatchEncoding, index: int) -> int:
+        num_tokens = len(encoding["input_ids"])
+        last_span = encoding.token_to_chars(index)
+        index += 1
+        while index < num_tokens:
+            next_span = encoding.token_to_chars(index)
+            if next_span.start < last_span.end:
+                # Some subsequent tokens get mapped to the same char span.
+                last_span = next_span
+                index += 1
+                continue
+            return index
+        return index
 
     def _predict_masks_at_indexes(
         self,
