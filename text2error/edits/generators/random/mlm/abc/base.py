@@ -121,7 +121,6 @@ class MaskedLMRandomTextEditsGenerator(RandomTextEditsGenerator):
 
             # masks_logits.shape = [tokens_to_replace, vocab_size]
             masks_logits = logits[non_special_mask][indexes].double()
-            del logits
             if filter_best_k > 0:
                 best_k_ids = masks_logits.topk(
                     filter_best_k, 1, largest=True, sorted=False
@@ -133,20 +132,16 @@ class MaskedLMRandomTextEditsGenerator(RandomTextEditsGenerator):
             if filter_best_k > 0:
                 # Filter best k predictions
                 masks_logits.scatter_(1, best_k_ids, float("-inf"))
-                del best_k_ids
             if filter_worst_k > 0:
                 # Filter worst k predictions
                 masks_logits.scatter_(1, worst_k_ids, float("-inf"))
-                del worst_k_ids
             # Filter original ids
             masks_logits.scatter_(1, orig_ids_at_indexes.unsqueeze(1), float("-inf"))
             # Filter special ids
             masks_logits.index_fill_(1, special_ids, float("-inf"))
             # masks_probs.shape = [tokens_to_replace, vocab_size]
             masks_probs = masks_logits.softmax(1)
-            del masks_logits
 
-            masks_probs = masks_probs.cpu()
             # masks_pred_ids.shape = [tokens_to_replace]
             masks_pred_ids = pt.empty(masks_probs.size(0), dtype=pt.long)
             for i, mask_probs in enumerate(masks_probs):
@@ -155,12 +150,10 @@ class MaskedLMRandomTextEditsGenerator(RandomTextEditsGenerator):
                 tokens, cweights = tokens.tolist(), cweights.tolist()
                 token_id = self.rng.choices(tokens, k=1, cum_weights=cweights)[0]
                 masks_pred_ids[i] = token_id
-            del masks_probs
             masks_pred_ids = masks_pred_ids.to(self.model.device)
 
             # Update masks with predictions
             pred_non_special_ids.scatter_(0, indexes, masks_pred_ids)
-            del masks_pred_ids
             pred_ids.masked_scatter_(non_special_mask, pred_non_special_ids)
 
         return pred_ids, pred_non_special_ids
