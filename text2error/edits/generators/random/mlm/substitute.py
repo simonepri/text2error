@@ -77,15 +77,15 @@ class SubstituteRandomMLMToken(MaskedLMRandomTextEditsGeneratorWithModel):
         masks_logits = logits_at_indexes(
             self.model, masked_ids, attention_mask, tokens_mask, masks_indexes
         )
-        masks_probs = masks_logits.softmax(-1)
+        masks_probs = masks_logits.double().softmax(-1).cpu()
 
         predictions = []
         # pylint: disable=not-callable
         special_ids = self.tokenizer.all_special_ids
         original_ids = ids[tokens_mask][masks_indexes].tolist()
-        for i in range(masks_probs.size(0)):
+        for masks_prob, original_id in zip(masks_probs, original_ids):
             token_id = self.candidate_selector(
-                self.rng, masks_probs[i], special_ids, original_ids[i]
+                self.rng, masks_prob.clone(), special_ids, original_id
             )
             predictions.append(token_id)
 

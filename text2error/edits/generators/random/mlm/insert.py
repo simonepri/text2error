@@ -76,13 +76,15 @@ class InsertRandomMLMToken(MaskedLMRandomTextEditsGeneratorWithModel):
         masks_logits = logits_at_indexes(
             self.model, masked_ids, attention_mask, tokens_mask, masks_indexes
         )
-        masks_probs = masks_logits.softmax(-1)
+        masks_probs = masks_logits.double().softmax(-1).cpu()
 
         predictions = []
         # pylint: disable=not-callable
         special_ids = self.tokenizer.all_special_ids
-        for i in range(masks_probs.size(0)):
-            token_id = self.candidate_selector(self.rng, masks_probs[i], special_ids)
+        for masks_prob in masks_probs:
+            token_id = self.candidate_selector(
+                self.rng, masks_prob.clone(), special_ids
+            )
             predictions.append(token_id)
 
         edits = []
