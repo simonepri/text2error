@@ -1,33 +1,35 @@
 from typing import *  # pylint: disable=wildcard-import,unused-wildcard-import
 
-from transformers.tokenization_utils import BatchEncoding
-
-from .abc.base import MaskedLMRandomTextEditsGenerator
+from .abc.tokenizer import MaskedLMRandomTextEditsGeneratorWithTokenizer
 from ....edit import TextEdit
+from .....utils.transformers import chars
 
 
-class RemoveRandomMLMToken(MaskedLMRandomTextEditsGenerator):
+class RemoveRandomMLMToken(MaskedLMRandomTextEditsGeneratorWithTokenizer):
     # pylint: disable=too-few-public-methods
 
     def generate(self, text: str) -> List[TextEdit]:
-        encoding = self._encode(text)
-        indexes = self._get_possible_indexes(encoding)
-        num_pos = len(indexes)
+        encoding = self._simple_encode(text)
+        token_spans = chars(encoding)
+        num_char_spans = len(token_spans)
 
-        remotions = self._get_edits_num(num_pos, num_pos)
+        remotions = self._get_edits_num(num_char_spans, num_char_spans)
         if remotions == 0:
             return []
-        if remotions > num_pos:
+        if remotions > num_char_spans:
             raise ValueError("Too many remotions")
 
-        indexes = self.rng.sample(indexes, k=remotions)
-        indexes.sort()
+        char_span_indexes = self.rng.sample(range(num_char_spans), k=remotions)
+        char_span_indexes.sort()
 
         edits = []
         offset = 0
-        for i in indexes:
-            word_span = encoding.token_to_chars(i)
-            start, end = word_span.start, word_span.end
+        for char_span_index in char_span_indexes:
+            token_span = token_spans[char_span_index]
+            start_token = token_span.start
+
+            chars_span = encoding.token_to_chars(start_token)
+            start, end = chars_span.start, chars_span.end
 
             if start + offset == 0:
                 # If we are at the beginning of the text.
@@ -43,12 +45,3 @@ class RemoveRandomMLMToken(MaskedLMRandomTextEditsGenerator):
             edits.append(TextEdit("", start=start + offset, end=end + offset))
             offset -= end - start
         return edits
-
-    def _get_possible_indexes(self, encoding: BatchEncoding) -> List[int]:
-        num_tok = len(encoding["input_ids"])
-        indexes = [0]
-        i = self._get_next_char_span_index(encoding, 0)
-        while i < num_tok:
-            indexes.append(i)
-            i = self._get_next_char_span_index(encoding, i)
-        return indexes

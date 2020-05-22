@@ -15,9 +15,9 @@ class KeyedSingletonLoader:
             raise ValueError("The provided key is not loaded: " + str(key))
         return self.cache[key]
 
-    def load(self, key: T, singleton_provider: Callable[[T], Any]) -> Any:
+    def load(self, key: T, singleton_provider: Callable[[], Any]) -> Any:
         if not self.loaded(key):
-            self.cache[key] = 0, singleton_provider(key)
+            self.cache[key] = 0, singleton_provider()
         key_cache = self.cache[key]
         self.cache[key] = key_cache[0] + 1, key_cache[1]
         return key_cache[1]

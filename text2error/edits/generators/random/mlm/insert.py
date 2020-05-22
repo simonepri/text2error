@@ -1,54 +1,96 @@
 from typing import *  # pylint: disable=wildcard-import,unused-wildcard-import
 
+import random
 from array import array
 
 import numpy as np
 import torch as pt
-from transformers.tokenization_utils import BatchEncoding
+from transformers.tokenization_utils import TokenSpan
 
-from .abc.base import MaskedLMRandomTextEditsGenerator
+from .abc.model import MaskedLMRandomTextEditsGeneratorWithModel
 from ....edit import TextEdit
+from .....utils.transformers import chars, decode_ids, logits_at_indexes
+
+from .....utils.misc import resolve_optional
 
 
-class InsertRandomMLMToken(MaskedLMRandomTextEditsGenerator):
+class InsertRandomMLMToken(MaskedLMRandomTextEditsGeneratorWithModel):
     # pylint: disable=too-few-public-methods
 
+    def __init__(
+        self,
+        model_name: str = "bert-base-cased",
+        device: Optional[str] = None,
+        candidate_selector: Optional[
+            Callable[[random.Random, pt.Tensor, List[int]], int]
+        ] = None,
+        rng: Optional[random.Random] = None,
+        edits_num: Optional[Union[int, Callable[[int, Optional[int]], int]]] = None,
+    ) -> None:
+        # pylint: disable=too-many-arguments
+        super().__init__(model_name, device, rng, edits_num)
+
+        self.candidate_selector: Callable[
+            [random.Random, pt.Tensor, List[int]], int
+        ] = resolve_optional(candidate_selector, self._default_candidate_selector)
+
     def generate(self, text: str) -> List[TextEdit]:
-        # pylint: disable=too-many-locals,invalid-name
+        # pylint: disable=too-many-locals
+        encoding = self._simple_encode(text)
+        token_spans = chars(encoding)
+        # Add a fake TokenSpan at the end so can also insert after the last char span.
+        token_spans.append(TokenSpan(token_spans[-1].end, token_spans[-1].end))
+        num_char_spans = len(token_spans)
 
-        encoding = self._encode(text)
-        token_ids = encoding["input_ids"]
-        indexes = self._get_possible_indexes(encoding)
-        num_pos = len(indexes)
-
-        insertions = self._get_edits_num(num_pos, None)
+        insertions = self._get_edits_num(num_char_spans, None)
         if insertions == 0:
             return []
 
-        indexes = np.array(self.rng.choices(indexes, k=insertions))
-        indexes.sort()
+        char_span_indexes = self.rng.choices(range(num_char_spans), k=insertions)
+        char_span_indexes.sort()
+        token_indexes = list(map(lambda i: token_spans[i].start, char_span_indexes))
 
-        token_ids = token_ids if len(token_ids) > 0 else array("l")
-        masked_token_ids = np.insert(token_ids, indexes, self.tokenizer.mask_token_id)
-        pt_masked_token_ids = pt.from_numpy(masked_token_ids)
-        # TODO: Avoid roundtrip decoding and encoding.
-        new_text = self.tokenizer.decode(pt_masked_token_ids.tolist())
-        new_encoding = self._encode_for_model(new_text)
-        masked_ids = new_encoding["input_ids"]
-        token_mask = new_encoding["special_tokens_mask"] == 0
-        mask_indexes = indexes + np.arange(len(indexes))
-        pt_mask_indexes = pt.from_numpy(mask_indexes)
-        _, new_token_ids = self._predict_masks_at_indexes(
-            pt_mask_indexes, masked_ids, token_mask, pt_masked_token_ids[mask_indexes],
+        token_ids = encoding["input_ids"] if num_char_spans > 0 else array("l")
+        masked_token_ids = np.insert(
+            token_ids, token_indexes, self.tokenizer.mask_token_id
         )
-        predictions = new_token_ids[mask_indexes].tolist()
+
+        # TODO: Avoid roundtrip decode-encode.
+        new_text = self.tokenizer.decode(masked_token_ids.tolist())
+        new_model_encoding = self._model_encode(new_text)
+
+        masked_ids = new_model_encoding["input_ids"]
+        attention_mask = new_model_encoding["attention_mask"]
+        tokens_mask = new_model_encoding["special_tokens_mask"] == 0
+        masks_indexes = cast(
+            pt.LongTensor,
+            pt.from_numpy(np.array(token_indexes) + np.arange(len(token_indexes))),
+        )
+        masks_logits = logits_at_indexes(
+            self.model, masked_ids, attention_mask, tokens_mask, masks_indexes
+        )
+        masks_probs = masks_logits.softmax(-1)
+
+        predictions = []
+        # pylint: disable=not-callable
+        special_ids = self.tokenizer.all_special_ids
+        for i in range(masks_probs.size(0)):
+            token_id = self.candidate_selector(self.rng, masks_probs[i], special_ids)
+            predictions.append(token_id)
 
         edits = []
         offset = 0
-        for pi, i in enumerate(indexes):
-            start = 0 if i == 0 else encoding.token_to_chars(i - 1).end
+        for i, char_span_index in enumerate(char_span_indexes):
+            if char_span_index == 0:
+                start = 0
+            else:
+                token_span = token_spans[char_span_index - 1]
+                start_token = token_span.start
 
-            new_text = self._ids_to_string([predictions[pi]])
+                chars_span = encoding.token_to_chars(start_token)
+                start = chars_span.end
+
+            new_text = decode_ids(self.tokenizer, predictions[i : i + 1])
             if start + offset == 0:
                 # If we are at the beginning of a sentence.
                 if len(new_text) > 1 and new_text[0] == " ":
@@ -63,12 +105,12 @@ class InsertRandomMLMToken(MaskedLMRandomTextEditsGenerator):
 
         return edits
 
-    def _get_possible_indexes(self, encoding: BatchEncoding) -> List[int]:
-        num_tok = len(encoding["input_ids"])
-        indexes = [0]
-        i = self._get_next_char_span_index(encoding, 0)
-        while i < num_tok:
-            indexes.append(i)
-            i = self._get_next_char_span_index(encoding, i)
-        indexes.append(i)  # Index after the last token.
-        return indexes
+    @staticmethod
+    def _default_candidate_selector(
+        rng: random.Random, probabilities: pt.Tensor, special_ids: List[int],
+    ) -> int:
+        probabilities[special_ids] = 0.0
+        vocab_size = probabilities.size(0)
+        cum_weights = probabilities.cumsum(0).tolist()
+        token_id = rng.choices(range(vocab_size), k=1, cum_weights=cum_weights)[0]
+        return token_id
