@@ -39,6 +39,13 @@ class SubstituteRandomMLMToken(MaskedLMRandomTextEditsGeneratorWithModel):
     def generate(self, text: str) -> List[TextEdit]:
         # pylint: disable=too-many-locals
         encoding = self._simple_encode(text)
+
+        if len(encoding["input_ids"]) > self.tokenizer.max_len:
+            #  If the string is too long for the model only process the first chuck.
+            # The -4 is to leave space for special tokens.
+            end = encoding.token_to_chars(self.tokenizer.max_len - 4).end
+            return self.generate(text[:end])
+
         token_spans = chars(encoding)
         num_char_spans = len(token_spans)
 

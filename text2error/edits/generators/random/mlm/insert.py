@@ -37,6 +37,13 @@ class InsertRandomMLMToken(MaskedLMRandomTextEditsGeneratorWithModel):
     def generate(self, text: str) -> List[TextEdit]:
         # pylint: disable=too-many-locals
         encoding = self._simple_encode(text)
+
+        if len(encoding["input_ids"]) > self.tokenizer.max_len:
+            #  If the string is too long for the model only process the first chuck.
+            # The -4 is to leave space for special tokens.
+            end = encoding.token_to_chars(self.tokenizer.max_len - 4).end
+            return self.generate(text[:end])
+
         token_spans = chars(encoding)
         # Add a fake TokenSpan at the end so can also insert after the last char span.
         token_spans.append(TokenSpan(token_spans[-1].end, token_spans[-1].end))

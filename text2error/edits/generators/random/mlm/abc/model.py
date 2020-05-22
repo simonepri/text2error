@@ -44,11 +44,10 @@ class MaskedLMRandomTextEditsGeneratorWithModel(
         encoding = self.tokenizer.encode_plus(
             text,
             add_special_tokens=True,
-            max_length=self.tokenizer.max_len,
-            pad_to_max_length=True,
             return_special_tokens_mask=True,
             return_tensors="pt",
         )
+        # TODO: Handle overflowing elements for long sentences.
         return encoding
 
     @classmethod
