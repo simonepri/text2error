@@ -10,18 +10,22 @@ class Text2ErrorGenerator:
     def __init__(
         self,
         generators: List[TextEditsGenerator],
-        generation_order: Optional[Union[List[int], Callable[[int], List[int]]]] = None,
+        generation_order: Optional[
+            Union[List[int], Callable[[int, str], List[int]]]
+        ] = None,
     ) -> None:
         self.generators = list(generators)
         self.generation_order: Union[
-            List[int], Callable[[int], List[int]]
+            List[int], Callable[[int, str], List[int]]
         ] = resolve_optional(generation_order, list(range(len(self))))
 
     def __len__(self) -> int:
         return len(self.generators)
 
     def __call__(self, text: str) -> Tuple[str, List[TextEdit]]:
-        generation_order = resolve_value_or_callable(self.generation_order, len(self))
+        generation_order = resolve_value_or_callable(
+            self.generation_order, len(self), text
+        )
 
         all_edits = []
         for idx in generation_order:

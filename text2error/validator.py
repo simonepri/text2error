@@ -10,18 +10,22 @@ class Text2ErrorValidator:
     def __init__(
         self,
         validators: List[TextEditsValidator],
-        validation_order: Optional[Union[List[int], Callable[[int], List[int]]]] = None,
+        validation_order: Optional[
+            Union[List[int], Callable[[int, str, str], List[int]]]
+        ] = None,
     ) -> None:
         self.validators = list(validators)
         self.validation_order: Union[
-            List[int], Callable[[int], List[int]]
+            List[int], Callable[[int, str, str], List[int]]
         ] = resolve_optional(validation_order, list(range(len(self))))
 
     def __len__(self) -> int:
         return len(self.validators)
 
     def __call__(self, source_text: str, modified_text: str) -> bool:
-        validation_order = resolve_value_or_callable(self.validation_order, len(self))
+        validation_order = resolve_value_or_callable(
+            self.validation_order, len(self), source_text, modified_text
+        )
 
         valid = True
         for idx in validation_order:
