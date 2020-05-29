@@ -23,18 +23,16 @@ class SubstituteRandomMLMToken(MaskedLMRandomTextEditsGeneratorWithModel):
         self,
         model_name: str = "bert-base-cased",
         device: Optional[str] = None,
-        candidate_selector: Optional[
-            Callable[[random.Random, pt.Tensor, List[int], int], int]
-        ] = None,
+        candidate_selector: Optional[Callable[[pt.Tensor, int], int]] = None,
         rng: Optional[random.Random] = None,
         edits_num: Optional[Union[int, Callable[[int, Optional[int]], int]]] = None,
     ) -> None:
         # pylint: disable=too-many-arguments
         super().__init__(model_name, device, rng, edits_num)
 
-        self.candidate_selector: Callable[
-            [random.Random, pt.Tensor, List[int], int], int
-        ] = resolve_optional(candidate_selector, self._default_candidate_selector)
+        self.candidate_selector: Callable[[pt.Tensor, int], int] = resolve_optional(
+            candidate_selector, self._default_candidate_selector
+        )
 
     def generate(self, text: str) -> List[TextEdit]:
         # pylint: disable=too-many-locals
@@ -77,16 +75,13 @@ class SubstituteRandomMLMToken(MaskedLMRandomTextEditsGeneratorWithModel):
         masks_logits = logits_at_indexes(
             self.model, masked_ids, attention_mask, tokens_mask, masks_indexes
         )
-        masks_probs = masks_logits.double().softmax(-1).cpu()
+        masks_logits[:, self.tokenizer.all_special_ids] = float("-inf")
+        masks_log_probs = masks_logits.log_softmax(-1).cpu()
 
         predictions = []
-        # pylint: disable=not-callable
-        special_ids = self.tokenizer.all_special_ids
         original_ids = ids[tokens_mask][masks_indexes].tolist()
-        for masks_prob, original_id in zip(masks_probs, original_ids):
-            token_id = self.candidate_selector(
-                self.rng, masks_prob.clone(), special_ids, original_id
-            )
+        for mask_log_probs, original_id in zip(masks_log_probs, original_ids):
+            token_id = self.candidate_selector(mask_log_probs, original_id)
             predictions.append(token_id)
 
         edits = []
@@ -116,14 +111,17 @@ class SubstituteRandomMLMToken(MaskedLMRandomTextEditsGeneratorWithModel):
 
     @staticmethod
     def _default_candidate_selector(
-        rng: random.Random,
-        probabilities: pt.Tensor,
-        special_ids: List[int],
-        original_id: int,
+        tokens_log_prob: pt.Tensor, original_id: int
     ) -> int:
-        probabilities[special_ids] = 0.0
-        probabilities[original_id] = 0.0
-        vocab_size = probabilities.size(0)
-        cum_weights = probabilities.cumsum(0).tolist()
-        token_id = rng.choices(range(vocab_size), k=1, cum_weights=cum_weights)[0]
-        return token_id
+        # NB: tokens_log_prob should contain at least one non-inf element.
+        filter_mask = tokens_log_prob != float("-inf")
+        filter_mask[original_id] = False
+        filtered_ids = filter_mask.nonzero().squeeze(-1)
+        filtered_logits = tokens_log_prob[filtered_ids]
+        # We sample from the token distribution directly in log space.
+        # NB: There is no need to normalize the logits.
+        # See: Gumbel-max trick (https://w.wiki/S4s).
+        gumbel_sampler = pt.distributions.Gumbel(loc=0, scale=1)  # type: ignore
+        gumbel_draws = gumbel_sampler.sample(filtered_logits.shape)
+        id = filtered_ids[(filtered_logits + gumbel_draws).argmax(0)]
+        return id
