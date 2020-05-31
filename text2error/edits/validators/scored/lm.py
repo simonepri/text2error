@@ -23,12 +23,13 @@ class ValidateWithLMScore(ScoredTextEditsValidator):
         super().__init__(scoring_comp, scoring_options)
 
         self.model_name = model_name
-        self.scorer = self.__load_model(model_name, device=device)
+        self.device = device
+        self.scorer = self.__load_model(self.model_name, device=self.device)
 
         self.last_source: Optional[Tuple[str, float]] = None
 
     def __del__(self) -> None:
-        self.__unload_model(self.model_name)
+        self.__unload_model(self.model_name, device=self.device)
 
     def validate(self, source_text: str, modified_text: str) -> bool:
         if self.last_source is None or self.last_source[0] != modified_text:
@@ -45,15 +46,17 @@ class ValidateWithLMScore(ScoredTextEditsValidator):
         return self.scoring_comp(source_score, modified_score)
 
     @classmethod
-    def __load_model(cls, model_name: str, **kwargs) -> LMScorer:
-        return cls.models_cache.load(
-            model_name, functools.partial(cls.__load_scorer_model, **kwargs)
+    def __load_model(cls, model_name: str, device: Optional[str] = None) -> LMScorer:
+        key = model_name + "-" + str(device)
+        scorer_provider = functools.partial(
+            cls.__load_scorer_model, model_name, device=device
         )
+        return cls.models_cache.load(key, scorer_provider)
 
     @classmethod
-    def __unload_model(cls, model_name: str, **kwargs) -> None:
-        # pylint: disable=unused-argument
-        cls.models_cache.unload(model_name)
+    def __unload_model(cls, model_name: str, device: Optional[str] = None) -> None:
+        key = model_name + "-" + str(device)
+        cls.models_cache.unload(key)
 
     @classmethod
     def __load_scorer_model(cls, model_name: str, **kwargs) -> LMScorer:
