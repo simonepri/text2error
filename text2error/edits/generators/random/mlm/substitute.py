@@ -123,5 +123,4 @@ class SubstituteRandomMLMToken(MaskedLMRandomTextEditsGeneratorWithModel):
         # See: Gumbel-max trick (https://w.wiki/S4s).
         gumbel_sampler = pt.distributions.Gumbel(loc=0, scale=1)  # type: ignore
         gumbel_draws = gumbel_sampler.sample(filtered_logits.shape)
-        id = filtered_ids[(filtered_logits + gumbel_draws).argmax(0)]
-        return id
+        return filtered_ids[(filtered_logits + gumbel_draws).argmax(0)]
