@@ -1,5 +1,7 @@
 from typing import *  # pylint: disable=wildcard-import,unused-wildcard-import
 
+import math
+
 import torch as pt
 from transformers import PreTrainedModel, PreTrainedTokenizer
 from transformers.tokenization_utils import BatchEncoding, TokenSpan
@@ -24,12 +26,20 @@ def logits_at_indexes(
     attention_mask: pt.LongTensor,
     tokens_mask: pt.BoolTensor,
     indexes: pt.LongTensor,
+    dry_run: bool = False,
 ) -> pt.FloatTensor:
-    with pt.no_grad():
-        ids = cast(pt.LongTensor, ids.to(model.device))
-        attention_mask = cast(pt.LongTensor, attention_mask.to(model.device))
-        logits = model(ids, attention_mask=attention_mask)[0]
-    output_logits = logits[tokens_mask][indexes]
+    # pylint: disable=too-many-arguments
+    if dry_run:
+        vocab_size = model.config.vocab_size
+        num_indexes = indexes.size(0)
+        unif_log_prob = math.log(1.0) - math.log(vocab_size)
+        output_logits = pt.full((num_indexes, vocab_size), unif_log_prob)
+    else:
+        with pt.no_grad():
+            ids = cast(pt.LongTensor, ids.to(model.device))
+            attention_mask = cast(pt.LongTensor, attention_mask.to(model.device))
+            logits = model(ids, attention_mask=attention_mask)[0]
+        output_logits = logits[tokens_mask][indexes]
     output_logits = cast(pt.FloatTensor, output_logits)
     return output_logits
 

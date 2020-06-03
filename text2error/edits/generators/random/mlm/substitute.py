@@ -24,12 +24,14 @@ class SubstituteRandomMLMToken(MaskedLMRandomTextEditsGeneratorWithModel):
         model_name: str = "bert-base-cased",
         device: Optional[str] = None,
         candidate_selector: Optional[Callable[[pt.Tensor, int], int]] = None,
+        bypass_model: bool = False,
         rng: Optional[random.Random] = None,
         edits_num: Optional[Union[int, Callable[[int, Optional[int]], int]]] = None,
     ) -> None:
         # pylint: disable=too-many-arguments
         super().__init__(model_name, device, rng, edits_num)
 
+        self.bypass_model = bypass_model
         self.candidate_selector: Callable[[pt.Tensor, int], int] = resolve_optional(
             candidate_selector, self._default_candidate_selector
         )
@@ -73,7 +75,12 @@ class SubstituteRandomMLMToken(MaskedLMRandomTextEditsGeneratorWithModel):
         ext_mask_indexes = cast(pt.LongTensor, pt.tensor(ext_token_indexes))
         masked_ids = mask_at_indexes(self.tokenizer, ids, tokens_mask, ext_mask_indexes)
         masks_logits = logits_at_indexes(
-            self.model, masked_ids, attention_mask, tokens_mask, masks_indexes
+            self.model,
+            masked_ids,
+            attention_mask,
+            tokens_mask,
+            masks_indexes,
+            dry_run=self.bypass_model,
         )
         masks_logits[:, self.tokenizer.all_special_ids] = float("-inf")
         masks_log_probs = masks_logits.log_softmax(-1).cpu()
