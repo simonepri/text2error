@@ -30,7 +30,7 @@ def logits_at_indexes(
         attention_mask = cast(pt.LongTensor, attention_mask.to(model.device))
         logits = model(ids, attention_mask=attention_mask)[0]
     output_logits = logits[tokens_mask][indexes]
-    output_logits = cast(pt.LongTensor, output_logits)
+    output_logits = cast(pt.FloatTensor, output_logits)
     return output_logits
 
 
