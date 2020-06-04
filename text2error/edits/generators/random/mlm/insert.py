@@ -82,7 +82,7 @@ class InsertRandomMLMToken(MaskedLMRandomTextEditsGeneratorWithModel):
             dry_run=self.bypass_model,
         )
         masks_logits[:, self.tokenizer.all_special_ids] = float("-inf")
-        masks_log_probs = masks_logits.log_softmax(-1).cpu()
+        masks_log_probs = masks_logits.log_softmax(-1)
 
         predictions = []
         for mask_log_probs in masks_log_probs:
