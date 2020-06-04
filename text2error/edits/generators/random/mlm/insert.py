@@ -122,9 +122,5 @@ class InsertRandomMLMToken(MaskedLMRandomTextEditsGeneratorWithModel):
         filter_mask = tokens_log_prob != float("-inf")
         filtered_ids = filter_mask.nonzero().squeeze(-1)
         filtered_logits = tokens_log_prob[filtered_ids]
-        # We sample from the token distribution directly in log space.
-        # NB: There is no need to normalize the logits.
-        # See: Gumbel-max trick (https://w.wiki/S4s).
-        gumbel_sampler = pt.distributions.Gumbel(loc=0, scale=1)  # type: ignore
-        gumbel_draws = gumbel_sampler.sample(filtered_logits.shape)
-        return filtered_ids[(filtered_logits + gumbel_draws).argmax(0)]
+        filtered_probs = filtered_logits.softmax(-1)
+        return filtered_ids[pt.multinomial(filtered_probs, 1).item()]
